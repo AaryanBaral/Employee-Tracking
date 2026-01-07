@@ -1,0 +1,138 @@
+1. i want to search by name also
+2. i want full detail for a device not only top and other stuffs
+3. i also want to add a mark as seen to each device weather it is seen or not seen so that i can keep track of what i missed out.
+4. Backend needs it to attribute data.
+    ✅ Task: generate and persist deviceId on the machine 
+    (agent config file, or extension storage), 
+    and include it in uploads.
+
+
+
+
+
+
+Windows-only checklist (do tomorrow on Windows laptop)
+
+Implement real WindowsIdleCollector + WindowsAppCollector (they look stubby right now)
+
+Add installer steps for running Agent.Service as a Windows Service (README mentions this)
+
+Verify permissions/UAC + “run at startup”
+
+
+Where you are after the idempotency + batch work
+
+With what you already implemented in Tracker.Api (indexes + chunking + conflict ignore + health endpoints), your backend is roughly:
+
+~80% done for ingestion reliability
+
+Remaining big missing piece is end-to-end synchronization (Agent → Backend) and either events ingestion or agent sessionization.
+
+
+
+
+
+## One critical accuracy limitation (macOS + Chromium extension)
+
+A Chromium extension cannot reliably tell when the browser itself lost focus (user alt-tabbed to another app). That means “time spent” can be slightly inflated unless you also have:
+
+an AppCollector that tells you foreground app changes (later)
+
+or an OS-level “browser active window” signal (later)
+
+For now, your “time spent” is basically:
+
+time between tab-change events inside the browser.
+
+That’s still useful, and it’s your “biggest visible win”, but just know the limitation.
+
+
+
+
+Step 4: How browser extension will send data (planned path)
+
+Since you’re testing only on Windows, plan for the MVP-friendly approach:
+
+✅ Extension → localhost HTTP → Agent.Service
+
+Agent hosts a tiny HTTP endpoint on:
+
+http://127.0.0.1:43121/web-event
+
+Extension POSTs { domain, title, url(optional), ts }
+
+Agent stores + uploads to backend
+
+Later you can switch to Native Messaging if you want.
+
+
+
+
+
+
+
+
+curl -i -H "Content-Type: application/json" \
+  -d "{\"eventId\":\"$(uuidgen)\",\"deviceId\":\"$DEVICE_ID\",\"domain\":\"example.com\",\"title\":\"Test\",\"url\":\"https://example.com\",\"timestamp\":\"$NOW\",\"browser\":\"chromium\"}" \
+  "$BASE_URL/events/web"
+Web event (batch)
+
+bash
+
+curl -i -H "Content-Type: application/json" \
+  -d "{\"events\":[{\"eventId\":\"$(uuidgen)\",\"deviceId\":\"$DEVICE_ID\",\"domain\":\"example.com\",\"title\":\"Test\",\"url\":\"https://example.com\",\"timestamp\":\"$NOW\",\"browser\":\"chromium\"}]}" \
+  "$BASE_URL/events/web/batch"
+Web sessions
+
+bash
+
+curl -i -H "Content-Type: application/json" \
+  -d "{\"deviceId\":\"$DEVICE_ID\",\"batchId\":\"$(uuidgen)\",\"sequence\":1,\"sentAt\":\"$NOW\",\"sessions\":[{\"sessionId\":\"$(uuidgen)\",\"domain\":\"example.com\",\"title\":\"Test\",\"url\":\"https://example.com\",\"startAt\":\"$NOW\",\"endAt\":\"2025-01-01T00:05:00Z\"}]}" \
+  "$BASE_URL/ingest/web-sessions"
+App sessions
+
+bash
+
+curl -i -H "Content-Type: application/json" \
+  -d "{\"deviceId\":\"$DEVICE_ID\",\"batchId\":\"$(uuidgen)\",\"sequence\":1,\"sentAt\":\"$NOW\",\"sessions\":[{\"sessionId\":\"$(uuidgen)\",\"processName\":\"Code\",\"windowTitle\":\"Editor\",\"startAt\":\"$NOW\",\"endAt\":\"2025-01-01T00:05:00Z\"}]}" \
+  "$BASE_URL/ingest/app-sessions"
+Idle sessions
+
+bash
+
+curl -i -H "Content-Type: application/json" \
+  -d "{\"deviceId\":\"$DEVICE_ID\",\"batchId\":\"$(uuidgen)\",\"sequence\":1,\"sentAt\":\"$NOW\",\"sessions\":[{\"sessionId\":\"$(uuidgen)\",\"startAt\":\"$NOW\",\"endAt\":\"2025-01-01T00:02:00Z\"}]}" \
+  "$BASE_URL/ingest/idle-sessions"
+Device heartbeat
+
+bash
+
+curl -i -H "Content-Type: application/json" \
+  -d "{\"deviceId\":\"$DEVICE_ID\",\"hostname\":\"test-mac\",\"lastSeenAt\":\"$NOW\"}" \
+  "$BASE_URL/devices/heartbeat"
+Devices list + search
+
+bash
+
+curl -i "$BASE_URL/devices?page=1&pageSize=50&query=dev"
+Device patch (mark seen)
+
+bash
+
+curl -i -X PATCH -H "Content-Type: application/json" \
+  -d "{\"displayName\":\"Aaryan Mac\",\"isSeen\":true}" \
+  "$BASE_URL/devices/$DEVICE_ID"
+Device summary
+
+bash
+
+curl -i "$BASE_URL/devices/$DEVICE_ID/summary?date=2025-01-01"
+Device sessions list
+
+bash
+
+curl -i "$BASE_URL/devices/$DEVICE_ID/web-sessions?start=2025-01-01T00:00:00Z&end=2025-01-01T23:59:59Z&page=1&pageSize=50"
+curl -i "$BASE_URL/devices/$DEVICE_ID/app-sessions?start=2025-01-01T00:00:00Z&end=2025-01-01T23:59:59Z&page=1&pageSize=50"
+curl -i "$BASE_URL/devices/$DEVICE_ID/idle-sessions?start=2025-01-01T00:00:00Z&end=2025-01-01T23:59:59Z&page=1&pageSize=50"
+If you want me to wire a BASE_URL config into the agent so it can be overridden in one place, I can add that too.
+

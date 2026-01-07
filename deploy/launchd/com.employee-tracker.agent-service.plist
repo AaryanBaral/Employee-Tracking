@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.employee-tracker.agent-service</string>
+    <key>ProgramArguments</key>
+    <array>
+      <!-- Update paths to your dotnet binary and Agent.Service.dll -->
+      <string>/usr/local/bin/dotnet</string>
+      <string>/opt/EmployeeTracker/Agent.Service/Agent.Service.dll</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/EmployeeTracker/agent-service.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/EmployeeTracker/agent-service.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>DOTNET_ENVIRONMENT</key>
+      <string>Production</string>
+    </dict>
+  </dict>
+</plist>
