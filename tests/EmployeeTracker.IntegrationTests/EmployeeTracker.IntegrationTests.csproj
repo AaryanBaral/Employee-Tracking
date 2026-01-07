@@ -7,6 +7,10 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(RUN_DOCKER_TESTS)' == '1' Or '$(RUN_DOCKER_TESTS)' == 'true' Or '$(RUN_DOCKER_TESTS)' == 'True' Or '$(CI)' == 'true' Or '$(CI)' == 'True'">
+    <DefineConstants>$(DefineConstants);RUN_DOCKER_TESTS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
   <PackageReference Include="Testcontainers.PostgreSql" Version="4.10.0" />
 

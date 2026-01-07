@@ -1,0 +1,17 @@
+# Default: normalize text files to LF in repo
+* text=auto
+
+# Force LF for source files
+*.cs   text eol=lf
+*.csproj text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.ps1  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Binary files
+*.exe  binary
+*.dll  binary
+*.png  binary
+*.jpg  binary

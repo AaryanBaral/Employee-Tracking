@@ -1,6 +1,8 @@
 using Agent.Shared.LocalApi;
 using Agent.Shared.Models;
 using Agent.Windows.Native;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 internal static class Program
 {
@@ -15,7 +17,40 @@ internal static class Program
     private const string PollSecondsEnv = "AGENT_POLL_SECONDS";
     private const string FailureExitSecondsEnv = "AGENT_FAILURE_EXIT_SECONDS";
 
-    private static async Task<int> Main()
+    private static async Task Main(string[] args)
+    {
+        using var host = Host.CreateDefaultBuilder(args)
+            .UseWindowsService()
+            .ConfigureServices(services =>
+            {
+                services.AddHostedService<AgentWindowsWorker>();
+            })
+            .Build();
+
+        await host.RunAsync();
+    }
+
+    private sealed class AgentWindowsWorker : BackgroundService
+    {
+        private readonly IHostApplicationLifetime _lifetime;
+
+        public AgentWindowsWorker(IHostApplicationLifetime lifetime)
+        {
+            _lifetime = lifetime;
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            var exitCode = await RunAsync(stoppingToken);
+            if (exitCode != 0)
+            {
+                Environment.ExitCode = exitCode;
+                _lifetime.StopApplication();
+            }
+        }
+    }
+
+    private static async Task<int> RunAsync(CancellationToken stoppingToken)
     {
         var apiBaseUrl = Environment.GetEnvironmentVariable(LocalApiUrlEnv) ?? LocalApiConstants.DefaultBaseUrl;
         var token = Environment.GetEnvironmentVariable(LocalApiTokenEnv);
@@ -36,13 +71,13 @@ internal static class Program
         };
         var apiClient = new LocalApiClient(httpClient, apiBaseUrl, token);
 
-        var health = await apiClient.GetHealthAsync(CancellationToken.None);
+        var health = await apiClient.GetHealthAsync(stoppingToken);
         if (!health.Success)
         {
             return HandlePreflightFailure("health", health);
         }
 
-        var version = await apiClient.GetVersionAsync(CancellationToken.None);
+        var version = await apiClient.GetVersionAsync(stoppingToken);
         if (!version.Success)
         {
             return HandlePreflightFailure("version", version);
@@ -56,28 +91,20 @@ internal static class Program
 
         LogConnected(version.Value);
 
-        using var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, e) =>
-        {
-            e.Cancel = true;
-            cts.Cancel();
-        };
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
-
-        var timer = new PeriodicTimer(TimeSpan.FromSeconds(pollSeconds));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(pollSeconds));
         var lastSuccessAt = DateTimeOffset.UtcNow;
         var failureWindow = TimeSpan.FromSeconds(Math.Max(5, failureExitSeconds));
 
         try
         {
-            while (await timer.WaitForNextTickAsync(cts.Token))
+            while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 var now = DateTimeOffset.UtcNow;
                 var hadSuccess = false;
 
                 var idleSeconds = WindowsInput.GetIdleSeconds();
                 var idleRequest = new IdleSampleRequest(idleSeconds, now);
-                var idleResult = await apiClient.PostIdleAsync(idleRequest, cts.Token);
+                var idleResult = await apiClient.PostIdleAsync(idleRequest, stoppingToken);
                 if (idleResult.Success)
                 {
                     hadSuccess = true;
@@ -97,7 +124,7 @@ internal static class Program
                     var appName = TruncateRequired(foreground.AppName, 128);
                     var windowTitle = TruncateOptional(foreground.WindowTitle, 256);
                     var appRequest = new AppFocusRequest(appName, windowTitle, now);
-                    var appResult = await apiClient.PostAppFocusAsync(appRequest, cts.Token);
+                    var appResult = await apiClient.PostAppFocusAsync(appRequest, stoppingToken);
                     if (appResult.Success)
                     {
                         hadSuccess = true;

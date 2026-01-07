@@ -11,12 +11,16 @@ using Agent.Shared.Config;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Testcontainers.PostgreSql;
 using Tracker.Api.Data;
 using Tracker.Api.Endpoints;
 using Tracker.Api.Services;
+using Xunit;
 
 namespace EmployeeTracker.IntegrationTests;
 
@@ -60,8 +64,11 @@ public sealed class EndToEndIngestTests : IAsyncLifetime
 
         await _postgres.DisposeAsync();
     }
-
+#if RUN_DOCKER_TESTS
     [Fact]
+#else
+    [Fact(Skip = "Skipping Docker/Testcontainers tests. Set RUN_DOCKER_TESTS=1 to enable.")]
+#endif
     public async Task EndToEndFlow_WritesSessionsToDatabase()
     {
         var testStart = DateTimeOffset.UtcNow;
