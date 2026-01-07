@@ -15,7 +15,7 @@ public sealed class LocalApiClient
         _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
         _httpClient.DefaultRequestHeaders.Remove(LocalApiConstants.AuthHeaderName);
-        _httpClient.DefaultRequestHeaders.Add(LocalApiConstants.AuthHeaderName, token);
+        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation(LocalApiConstants.AuthHeaderName, token);
     }
 
     public Task<LocalApiResult<LocalHealthResponse>> GetHealthAsync(CancellationToken ct)
@@ -24,11 +24,17 @@ public sealed class LocalApiClient
     public Task<LocalApiResult<LocalVersionResponse>> GetVersionAsync(CancellationToken ct)
         => SendAsync<LocalVersionResponse>(HttpMethod.Get, "/version", null, ct);
 
+    public Task<LocalApiResult<LocalDiagResponse>> GetDiagAsync(CancellationToken ct)
+        => SendAsync<LocalDiagResponse>(HttpMethod.Get, "/diag", null, ct);
+
     public Task<LocalApiResult> PostIdleAsync(IdleSampleRequest request, CancellationToken ct)
         => SendAsync(HttpMethod.Post, "/events/idle", request, ct);
 
     public Task<LocalApiResult> PostAppFocusAsync(AppFocusRequest request, CancellationToken ct)
         => SendAsync(HttpMethod.Post, "/events/app-focus", request, ct);
+
+    public Task<LocalApiResult> PostWebEventAsync(WebEvent request, CancellationToken ct)
+        => SendAsync(HttpMethod.Post, "/events/web", request, ct);
 
     private async Task<LocalApiResult<T>> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct)
     {

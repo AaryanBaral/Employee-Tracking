@@ -1,6 +1,7 @@
 using Agent.Service.Infrastructure;
 using Agent.Service.Infrastructure.Outbox;
 using Agent.Service.Tracking;
+using Agent.Shared.LocalApi;
 using Agent.Shared.Models;
 using Microsoft.AspNetCore.Builder;
 using Agent.Service.Middleware;
@@ -73,7 +74,7 @@ public sealed class LocalApiHost
         app.MapGet("/health", () => Results.Ok(new
         {
             ok = true,
-            lastOutboxFlushAtUtc = _outboxState?.LastFlushAtUtc,
+            lastFlushAtUtc = _outboxState?.LastFlushAtUtc,
             deviceId = _deviceId,
             agentVersion = _agentVersion
         }));
@@ -85,15 +86,39 @@ public sealed class LocalApiHost
              return Results.Ok(stats);
         });
 
+        app.MapGet("/diag", async (OutboxRepository? repo) =>
+        {
+            object? stats = null;
+            if (repo != null)
+            {
+                stats = await repo.GetStatsAsync();
+            }
+            return Results.Ok(new
+            {
+                contract = LocalApiConstants.Contract,
+                deviceId = _deviceId,
+                agentVersion = _agentVersion,
+                port = Port,
+                serverTimeUtc = DateTimeOffset.UtcNow,
+                outbox = new
+                {
+                    pendingByType = stats,
+                    lastFlushAtUtc = _outboxState?.LastFlushAtUtc,
+                    available = repo != null
+                }
+            });
+        });
+
         app.MapGet("/version", () => Results.Ok(new
         {
-            contract = "local-api-v1",
+            contract = LocalApiConstants.Contract,
             deviceId = _deviceId,
             agentVersion = _agentVersion,
             port = Port,
             routes = new[]
             {
                 "GET /health",
+                "GET /diag",
                 "GET /version",
                 "GET /local/outbox/stats",
                 "POST /events/app-focus",

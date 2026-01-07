@@ -1,12 +1,13 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using Agent.Mac.Collectors;
+using Agent.Shared.LocalApi;
+using Agent.Shared.Models;
 
 internal static class Program
 {
     private static async Task Main()
     {
-        var apiBaseUrl = Environment.GetEnvironmentVariable("AGENT_LOCAL_API_URL") ?? "http://127.0.0.1:43121";
+        var apiBaseUrl = Environment.GetEnvironmentVariable("AGENT_LOCAL_API_URL") ?? LocalApiConstants.DefaultBaseUrl;
         var token = Environment.GetEnvironmentVariable("AGENT_LOCAL_API_TOKEN");
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -20,32 +21,34 @@ internal static class Program
         var appCollector = new MacAppCollector();
         var idleCollector = new MacIdleCollector();
 
-        using var client = new HttpClient { BaseAddress = new Uri(apiBaseUrl) };
-        client.DefaultRequestHeaders.Add("X-Agent-Token", token);
+        using var httpClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+        var apiClient = new LocalApiClient(httpClient, apiBaseUrl, token);
 
         var deviceId = TryLoadDeviceId() ?? "unknown";
         LogStartupSummary(deviceId, apiBaseUrl, pollSeconds);
 
-        if (!await IsLocalApiHealthyAsync(client))
+        var health = await apiClient.GetHealthAsync(CancellationToken.None);
+        if (!EnsurePreflight("health", health))
         {
-            Console.Error.WriteLine("Local API health check failed. Ensure Agent.Service is running and token is valid.");
             return;
         }
 
-        var version = await GetLocalApiVersionAsync(client);
-        if (version is null)
+        var version = await apiClient.GetVersionAsync(CancellationToken.None);
+        if (!EnsurePreflight("version", version))
         {
-            Console.Error.WriteLine("Local API version check failed.");
             return;
         }
 
-        if (!string.Equals(version.Contract, "local-api-v1", StringComparison.Ordinal))
+        if (!string.Equals(version.Value?.Contract, LocalApiConstants.Contract, StringComparison.Ordinal))
         {
-            Console.Error.WriteLine($"Local API contract mismatch: {version.Contract}");
+            Console.Error.WriteLine($"Local API contract mismatch: {version.Value?.Contract ?? "unknown"}");
             return;
         }
 
-        Console.WriteLine($"Local API contract: {version.Contract} DeviceId: {version.DeviceId} AgentVersion: {version.AgentVersion}");
+        Console.WriteLine($"Local API contract: {version.Value?.Contract} DeviceId: {version.Value?.DeviceId} AgentVersion: {version.Value?.AgentVersion}");
 
         var timer = new PeriodicTimer(TimeSpan.FromSeconds(pollSeconds));
         Console.WriteLine("Agent.Mac started.");
@@ -68,7 +71,15 @@ internal static class Program
                     if (idle is not null)
                     {
                         var idlePayload = new IdleSampleRequest(idle.IdleDuration.TotalSeconds, idle.TimestampUtc);
-                        await client.PostAsJsonAsync("/events/idle", idlePayload, cts.Token);
+                        var idleResult = await apiClient.PostIdleAsync(idlePayload, cts.Token);
+                        if (!idleResult.Success)
+                        {
+                            LogPostFailure("idle", idleResult);
+                            if (idleResult.IsUnauthorized)
+                            {
+                                return;
+                            }
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -82,7 +93,15 @@ internal static class Program
                     if (app is not null && !string.IsNullOrWhiteSpace(app.AppName))
                     {
                         var appPayload = new AppFocusRequest(app.AppName, app.WindowTitle, app.TimestampUtc);
-                        await client.PostAsJsonAsync("/events/app-focus", appPayload, cts.Token);
+                        var appResult = await apiClient.PostAppFocusAsync(appPayload, cts.Token);
+                        if (!appResult.Success)
+                        {
+                            LogPostFailure("app-focus", appResult);
+                            if (appResult.IsUnauthorized)
+                            {
+                                return;
+                            }
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -99,54 +118,28 @@ internal static class Program
         Console.WriteLine("Agent.Mac stopping.");
     }
 
-    private sealed record AppFocusRequest(string AppName, string? WindowTitle, DateTimeOffset TimestampUtc);
-    private sealed record IdleSampleRequest(double IdleSeconds, DateTimeOffset TimestampUtc);
-    private sealed record LocalHealthResponse(bool Ok);
-    private sealed record LocalVersionResponse(
-        string Contract,
-        string? DeviceId,
-        string? AgentVersion,
-        int Port);
-
-    private static async Task<bool> IsLocalApiHealthyAsync(HttpClient client)
+    private static bool EnsurePreflight<T>(string step, LocalApiResult<T> result)
     {
-        try
+        if (result.Success)
         {
-            using var response = await client.GetAsync("/health");
-            if (!response.IsSuccessStatusCode)
-            {
-                Console.Error.WriteLine($"Local API health status failed: {(int)response.StatusCode} {response.StatusCode}");
-                return false;
-            }
-
-            var payload = await response.Content.ReadFromJsonAsync<LocalHealthResponse>();
-            return payload?.Ok ?? true;
+            return true;
         }
-        catch (Exception ex)
+
+        if (result.IsUnauthorized)
         {
-            Console.Error.WriteLine($"Local API health check error: {ex.Message}");
+            Console.Error.WriteLine($"Local API {step} check unauthorized. Verify {LocalApiConstants.AuthHeaderName}.");
             return false;
         }
+
+        Console.Error.WriteLine($"Local API {step} check failed: {result.Error ?? "unreachable"}");
+        return false;
     }
 
-    private static async Task<LocalVersionResponse?> GetLocalApiVersionAsync(HttpClient client)
+    private static void LogPostFailure(string kind, LocalApiResult result)
     {
-        try
-        {
-            using var response = await client.GetAsync("/version");
-            if (!response.IsSuccessStatusCode)
-            {
-                Console.Error.WriteLine($"Local API version status failed: {(int)response.StatusCode} {response.StatusCode}");
-                return null;
-            }
-
-            return await response.Content.ReadFromJsonAsync<LocalVersionResponse>();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Local API version check error: {ex.Message}");
-            return null;
-        }
+        var status = result.StatusCode is null ? "n/a" : $"{(int)result.StatusCode} {result.StatusCode}";
+        var detail = string.IsNullOrWhiteSpace(result.Error) ? "unknown error" : result.Error;
+        Console.Error.WriteLine($"POST /events/{kind} failed: {status} {detail}");
     }
 
     private static void LogStartupSummary(string deviceId, string localApiUrl, int pollSeconds)

@@ -13,13 +13,22 @@ dotnet publish Agent.Windows/Agent.Windows.csproj -c Release -r win-x64 --self-c
 ```
 
 ## Run manually (PowerShell)
+Use per-session env vars for immediate runs:
+```
+$env:AGENT_LOCAL_API_URL = "http://127.0.0.1:43121"
+$env:AGENT_LOCAL_API_TOKEN = "dev-token"
+$env:AGENT_POLL_SECONDS = "1"
+$env:AGENT_FAILURE_EXIT_SECONDS = "60"
+
+dotnet run -p Agent.Windows
+```
+
+Persist env vars for scheduled tasks (applies to future shells):
 ```
 setx AGENT_LOCAL_API_URL "http://127.0.0.1:43121"
 setx AGENT_LOCAL_API_TOKEN "dev-token"
 setx AGENT_POLL_SECONDS "1"
 setx AGENT_FAILURE_EXIT_SECONDS "60"
-
-dotnet run -p Agent.Windows
 ```
 
 ## Install as Scheduled Task (PowerShell)

@@ -85,6 +85,10 @@ internal static class Program
                 else
                 {
                     LogPostFailure("idle", idleResult);
+                    if (idleResult.IsUnauthorized)
+                    {
+                        return ExitUnauthorized;
+                    }
                 }
 
                 var foreground = WindowsInput.GetForegroundApp();
@@ -101,6 +105,10 @@ internal static class Program
                     else
                     {
                         LogPostFailure("app-focus", appResult);
+                        if (appResult.IsUnauthorized)
+                        {
+                            return ExitUnauthorized;
+                        }
                     }
                 }
 
@@ -198,7 +206,9 @@ internal static class Program
 
     private static void LogPostFailure(string kind, LocalApiResult result)
     {
-        Console.Error.WriteLine($"POST /events/{kind} failed: {result.Error ?? "unknown error"}");
+        var status = result.StatusCode is null ? "n/a" : $"{(int)result.StatusCode} {result.StatusCode}";
+        var detail = string.IsNullOrWhiteSpace(result.Error) ? "unknown error" : result.Error;
+        Console.Error.WriteLine($"POST /events/{kind} failed: {status} {detail}");
     }
 
     private static string TruncateRequired(string? value, int maxLength)
