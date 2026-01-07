@@ -23,6 +23,7 @@ public sealed class LocalApiContractTests : IAsyncLifetime
     private OutboxRepository? _outboxRepo;
     private LocalApiClient? _client;
     private HttpClient? _httpClient;
+    private ILoggerFactory? _loggerFactory;
     private int _port;
     private string _deviceId = "test-device";
 
@@ -30,10 +31,10 @@ public sealed class LocalApiContractTests : IAsyncLifetime
     {
         _port = GetFreePort();
 
-        var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
-        var outboxLogger = loggerFactory.CreateLogger<OutboxRepository>();
-        var webLogger = loggerFactory.CreateLogger<WebSessionizer>();
-        var idleLogger = loggerFactory.CreateLogger<IdleSessionizer>();
+        _loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
+        var outboxLogger = _loggerFactory.CreateLogger<OutboxRepository>();
+        var webLogger = _loggerFactory.CreateLogger<WebSessionizer>();
+        var idleLogger = _loggerFactory.CreateLogger<IdleSessionizer>();
 
         var config = Options.Create(new AgentConfig());
         _outboxRepo = new OutboxRepository(config, outboxLogger);
@@ -74,12 +75,12 @@ public sealed class LocalApiContractTests : IAsyncLifetime
             _consumerCts.Cancel();
         }
 
+        _queue?.Channel.Writer.TryComplete();
+
         if (_localApi is not null)
         {
             await _localApi.StopAsync(CancellationToken.None);
         }
-
-        _queue?.Channel.Writer.TryComplete();
 
         if (_webEventConsumer is not null)
         {
@@ -94,6 +95,7 @@ public sealed class LocalApiContractTests : IAsyncLifetime
         }
 
         _httpClient?.Dispose();
+        _loggerFactory?.Dispose();
     }
 
     [Fact]
