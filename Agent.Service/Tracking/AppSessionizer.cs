@@ -88,9 +88,9 @@ public sealed class AppSessionizer
                 "APP END: {app} | {title} {start} -> {end} (secs={secs:n0})",
                 toEnqueue.AppName,
                 toEnqueue.WindowTitle,
-                toEnqueue.StartUtc,
-                toEnqueue.EndUtc,
-                (toEnqueue.EndUtc - toEnqueue.StartUtc).TotalSeconds);
+                toEnqueue.StartAtUtc,
+                toEnqueue.EndAtUtc,
+                (toEnqueue.EndAtUtc - toEnqueue.StartAtUtc).TotalSeconds);
         }
     }
 
@@ -120,9 +120,9 @@ public sealed class AppSessionizer
                 "APP END: {app} | {title} {start} -> {end} (secs={secs:n0})",
                 toEnqueue.AppName,
                 toEnqueue.WindowTitle,
-                toEnqueue.StartUtc,
-                toEnqueue.EndUtc,
-                (toEnqueue.EndUtc - toEnqueue.StartUtc).TotalSeconds);
+                toEnqueue.StartAtUtc,
+                toEnqueue.EndAtUtc,
+                (toEnqueue.EndAtUtc - toEnqueue.StartAtUtc).TotalSeconds);
         }
     }
 }
