@@ -42,7 +42,7 @@ public sealed class IdleSessionizer
             // We subtract the accumulated duration to find when it started
             _idleStartUtc = timestamp - idleDuration;
             _isIdle = true;
-            _logger.LogDebug("Idle started at {start} (detected at {now}, duration {dur})", _idleStartUtc, timestamp, idleDuration);
+            _logger.LogInformation("IDLE START @ {start}", _idleStartUtc);
         }
         else if (_isIdle && !isIdleNow)
         {
@@ -63,7 +63,11 @@ public sealed class IdleSessionizer
             );
 
             await _outbox.EnqueueAsync("idle_session", record);
-            _logger.LogDebug("Idle ended. Duration: {total}", end - start);
+            _logger.LogInformation(
+                "IDLE END {start} -> {end} (secs={secs:n0})",
+                record.StartAtUtc,
+                record.EndAtUtc,
+                (record.EndAtUtc - record.StartAtUtc).TotalSeconds);
         }
         else if (_isIdle && isIdleNow)
         {
@@ -87,6 +91,11 @@ public sealed class IdleSessionizer
             );
             
             await _outbox.EnqueueAsync("idle_session", record);
+            _logger.LogInformation(
+                "IDLE END {start} -> {end} (secs={secs:n0})",
+                record.StartAtUtc,
+                record.EndAtUtc,
+                (record.EndAtUtc - record.StartAtUtc).TotalSeconds);
             _isIdle = false;
             _idleStartUtc = null;
         }

@@ -9,11 +9,20 @@ using Agent.Service.Collectors;
 using Agent.Shared.Abstractions;
 using Agent.Shared.Config;
 using Agent.Windows.Collectors;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using System.Runtime.InteropServices;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.Configure<AgentConfig>(builder.Configuration.GetSection("Agent"));
 var agentConfig = builder.Configuration.GetSection("Agent").Get<AgentConfig>() ?? new AgentConfig();
+
+if (OperatingSystem.IsWindows())
+{
+    builder.Services.AddWindowsService(options =>
+    {
+        options.ServiceName = "EmployeeTrackerAgent";
+    });
+}
 
 // Collectors
 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))

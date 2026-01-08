@@ -20,6 +20,7 @@ public sealed class WebSessionizer
     private const double IdleThresholdSeconds = 60.0;
     private static readonly TimeSpan ForegroundGrace = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan IdleGrace = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan MinSessionDuration = TimeSpan.FromSeconds(1);
 
     public WebSessionizer(IOutboxService outbox, ILogger<WebSessionizer> logger)
     {
@@ -98,6 +99,17 @@ public sealed class WebSessionizer
             if (_active is null) return;
 
             var now = DateTimeOffset.UtcNow;
+            var duration = now - _active.StartUtc;
+            if (duration >= MinSessionDuration)
+            {
+                _logger.LogInformation(
+                    "WEB END: {browser} {domain} {start} -> {end} (secs={secs:n0})",
+                    _active.Browser,
+                    _active.Domain,
+                    _active.StartUtc,
+                    now,
+                    duration.TotalSeconds);
+            }
             sessionToClose = new WebSessionRecord(
                 Guid.NewGuid(),
                 _active.DeviceId,
@@ -120,7 +132,7 @@ public sealed class WebSessionizer
             return;
         }
 
-        if ((sessionToClose.EndAtUtc - sessionToClose.StartAtUtc) < TimeSpan.FromSeconds(1))
+        if ((sessionToClose.EndAtUtc - sessionToClose.StartAtUtc) < MinSessionDuration)
         {
             return;
         }
@@ -149,12 +161,29 @@ public sealed class WebSessionizer
                     StartUtc = now,
                     LastSeenUtc = now
                 };
+                _logger.LogInformation(
+                    "WEB START: {browser} {domain} {url} @ {start}",
+                    _active.Browser,
+                    _active.Domain,
+                    _active.Url,
+                    now);
                 return null;
             }
 
             if (!IsSamePage(_active, _currentTab))
             {
                 var end = now < _active.StartUtc ? DateTimeOffset.UtcNow : now;
+                var duration = end - _active.StartUtc;
+                if (duration >= MinSessionDuration)
+                {
+                    _logger.LogInformation(
+                        "WEB END: {browser} {domain} {start} -> {end} (secs={secs:n0})",
+                        _active.Browser,
+                        _active.Domain,
+                        _active.StartUtc,
+                        end,
+                        duration.TotalSeconds);
+                }
                 var sessionToClose = new WebSessionRecord(
                     Guid.NewGuid(),
                     _active.DeviceId,
@@ -174,6 +203,12 @@ public sealed class WebSessionizer
                     StartUtc = now,
                     LastSeenUtc = now
                 };
+                _logger.LogInformation(
+                    "WEB START: {browser} {domain} {url} @ {start}",
+                    _active.Browser,
+                    _active.Domain,
+                    _active.Url,
+                    now);
 
                 return sessionToClose;
             }
@@ -200,6 +235,17 @@ public sealed class WebSessionizer
         if (inactiveEnd < _active.StartUtc)
         {
             inactiveEnd = now;
+        }
+        var inactiveDuration = inactiveEnd - _active.StartUtc;
+        if (inactiveDuration >= MinSessionDuration)
+        {
+            _logger.LogInformation(
+                "WEB END: {browser} {domain} {start} -> {end} (secs={secs:n0})",
+                _active.Browser,
+                _active.Domain,
+                _active.StartUtc,
+                inactiveEnd,
+                inactiveDuration.TotalSeconds);
         }
 
         var toClose = new WebSessionRecord(

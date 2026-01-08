@@ -48,6 +48,11 @@ public sealed class CollectorWorker : BackgroundService
                 var idle = await _idleCollector.GetIdleAsync(stoppingToken);
                 if (idle is not null)
                 {
+                    if (_config.LogIdleEvents)
+                    {
+                        _logger.LogDebug("Idle sample: {idleSeconds:n2}s", idle.IdleDuration.TotalSeconds);
+                    }
+
                     await _idleSessionizer.HandleIdleStateAsync(idle.IdleDuration, now);
                     await _webSessionizer.HandleIdleStateAsync(idle.IdleDuration, now);
                 }
@@ -56,6 +61,11 @@ public sealed class CollectorWorker : BackgroundService
                 var app = await _appCollector.GetFocusedAppAsync(stoppingToken);
                 if (app is not null && !string.IsNullOrWhiteSpace(app.AppName))
                 {
+                    if (_config.LogAppEvents)
+                    {
+                        _logger.LogDebug("App focus sample: {app} | {title}", app.AppName, app.WindowTitle);
+                    }
+
                     await _appSessionizer.HandleAppFocusAsync(app.AppName, now, app.WindowTitle);
                     await _webSessionizer.HandleAppFocusAsync(app.AppName, now);
                 }
