@@ -34,6 +34,7 @@ public sealed class LocalApiContractTests : IAsyncLifetime
         _loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
         var outboxLogger = _loggerFactory.CreateLogger<OutboxRepository>();
         var webLogger = _loggerFactory.CreateLogger<WebSessionizer>();
+        var appLogger = _loggerFactory.CreateLogger<AppSessionizer>();
         var idleLogger = _loggerFactory.CreateLogger<IdleSessionizer>();
 
         var config = Options.Create(new AgentConfig());
@@ -44,7 +45,7 @@ public sealed class LocalApiContractTests : IAsyncLifetime
         var identityStore = new Agent.Service.Identity.DeviceIdentityStore();
 
         var webSessionizer = new WebSessionizer(outboxService, webLogger);
-        var appSessionizer = new AppSessionizer(outboxService, identityStore);
+        var appSessionizer = new AppSessionizer(outboxService, identityStore, appLogger);
         var idleSessionizer = new IdleSessionizer(outboxService, identityStore, idleLogger);
 
         _queue = new WebEventQueue();
